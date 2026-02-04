@@ -18,6 +18,8 @@ DOUBLETICK_SENDER_ID = env("DOUBLETICK_SENDER_ID", default="0000000000")
 AFRICASTALKING_USERNAME = env("AFRICASTALKING_USERNAME", default="test")
 AFRICASTALKING_API_KEY = env("AFRICASTALKING_API_KEY", default="dummy")
 
+ASGI_APPLICATION = "helpdesk.asgi.application"
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
@@ -58,7 +60,8 @@ INSTALLED_APPS = [
     'debug_toolbar',
     'django_prometheus',
 
-    'backend.core'
+    'backend.core',
+    'channels'
 ]
 
 CORS_ALLOWED_ORIGINS = [
@@ -116,9 +119,9 @@ INTERNAL_IPS = [
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'benue_helpdesk',   # 👈 confirmed from \l
-        'USER': 'helpdesk_user',         # 👈 default superuser
-        'PASSWORD': 'GodIsGreat234#', # 👈 the one you set
+        'NAME': 'benue_helpdesk',   #  
+        'USER': 'helpdesk_user',         #  
+        'PASSWORD': 'GodIsGreat234#', # 
         'HOST': 'localhost',
         'PORT': '5432',
     }
@@ -187,6 +190,12 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer"
+    }
+}
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

@@ -1,97 +1,83 @@
 from django.contrib import admin
 from django.urls import path, include
-from rest_framework import routers
 from rest_framework.routers import DefaultRouter
 import debug_toolbar
+
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
 )
 
-from backend.core import views
+# =========================
+# API MODULE IMPORTS
+# =========================
+from backend.core.api import auth_views, dashboard_views, export_views
+from backend.core.api.ticket_views import TicketViewSet
 
+# =========================
+# VIEWSETS (NON-TICKET)
+# =========================
 from backend.core.views import (
-    current_user,
-    onboard_youth,
-    register_user,
+    home,
     UserViewSet,
-    TicketViewSet,
     KnowledgeBaseViewSet,
     FeedbackViewSet,
     NotificationViewSet,
     TicketNoteViewSet,
     PollViewSet,
-    MinistryInfoViewSet,
     ProgramViewSet,
     WorkflowViewSet,
-    dashboard_report,
-    home,
-    export_tickets_csv,
-    export_tickets_pdf,
-    escalate_ticket,
+    MinistryInfoViewSet,
     YouthProfileViewSet,
     DocumentUploadViewSet,
-    list_programs,
-    
-    OfficerTicketViewSet,
-    OfficerInboxView,   
-   
 )
 
+# =========================
+# ROUTER
+# =========================
+router = DefaultRouter()
+router.register("users", UserViewSet, basename="users")
+router.register("tickets", TicketViewSet, basename="tickets")
+router.register("knowledgebase", KnowledgeBaseViewSet, basename="knowledgebase")
+router.register("feedback", FeedbackViewSet, basename="feedback")
+router.register("notifications", NotificationViewSet, basename="notifications")
+router.register("ticketnotes", TicketNoteViewSet, basename="ticketnotes")
+router.register("polls", PollViewSet, basename="polls")
+router.register("programs", ProgramViewSet, basename="programs")
+router.register("workflows", WorkflowViewSet, basename="workflows")
+router.register("ministry", MinistryInfoViewSet, basename="ministry")
+router.register("youth-profile", YouthProfileViewSet, basename="youth-profile")
+router.register("documents", DocumentUploadViewSet, basename="documents")
 
-# DRF router for ViewSets
-router = routers.DefaultRouter()
-router.register(r'users', UserViewSet, basename='user')
-router.register(r'tickets', TicketViewSet, basename='ticket')
-router.register(r'knowledgebase', KnowledgeBaseViewSet, basename='knowledgebase')
-router.register(r'feedback', FeedbackViewSet, basename='feedback')
-router.register(r'notifications', NotificationViewSet, basename='notification')
-router.register(r'ticketnotes', TicketNoteViewSet, basename='ticketnote')
-router.register(r'polls', PollViewSet, basename='poll')
-router.register(r'ministry', MinistryInfoViewSet, basename='ministry')
-router.register(r'programs', ProgramViewSet, basename='programs')
-router.register(r'workflows', WorkflowViewSet, basename='workflows')
-router.register(r'documents', DocumentUploadViewSet, basename='documents')
-router.register(r"youth-profile", YouthProfileViewSet, basename="youth-profile") 
-
-router.register(r"officer-tickets", OfficerTicketViewSet, basename="officer-tickets")
-
-
+# =========================
+# URLS
+# =========================
 urlpatterns = [
-    # Home and admin
-    path('', home, name="home"),
-    path('admin/', admin.site.urls),
-    
-    # Explicit user endpoints
-    path("api/current_user/", views.current_user, name="current-user"),
-    path("api/onboard/", onboard_youth, name="onboard_youth"),
-    path("api/register/", register_user, name='register_user'),
-    path("api/youth-profile/me/", YouthProfileViewSet.as_view({"get": "me", "patch": "me"})),
-    path("api/documents/", DocumentUploadViewSet.as_view({"post": "create"})),
-    # path("api/tickets/<int:ticket_id>/messages/", views.add_ticket_message, name="add_ticket_message"),
+    path("", home, name="home"),
+    path("admin/", admin.site.urls),
 
+    # ---------- AUTH ----------
+    path("api/login/", auth_views.login_view),
+    path("api/register/", auth_views.register_user),
+    path("api/onboard/", auth_views.onboard_youth),
+    path("api/current-user/", auth_views.current_user),
+    path("verify-email/<uidb64>/<token>/", auth_views.verify_email),
 
-    path('api/', include(router.urls)),
-    path('api/dashboard/', dashboard_report, name="dashboard_report"),
-    path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
-    path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
-    path('api/programs/', list_programs, name='list_programs'),
+    # ---------- JWT ----------
+    path("api/token/", TokenObtainPairView.as_view()),
+    path("api/token/refresh/", TokenRefreshView.as_view()),
 
-    path("officer-inbox/", OfficerInboxView.as_view()),
+    # ---------- DASHBOARD ----------
+    path("api/dashboard/", dashboard_views.dashboard_report),
 
-    # Ticket escalation
-    
-    path('tickets/<int:pk>/escalate/', escalate_ticket, name="escalate_ticket"),
-    path("api/my-tickets/", views.my_tickets),
-    path("api/officer-tickets/", views.officer_tickets),
-    path("api/admin-tickets/", views.admin_tickets),
+    # ---------- EXPORTS ----------
+    path("api/tickets/export/csv/", export_views.export_tickets_csv),
+    path("api/tickets/export/pdf/", export_views.export_tickets_pdf),
 
-    # Export endpoints
-    path('tickets/export/csv/', export_tickets_csv, name="export_tickets_csv"),
-    path('tickets/export/pdf/', export_tickets_pdf, name="export_tickets_pdf"),
+    # ---------- ROUTER ----------
+    path("api/", include(router.urls)),
 
-    # Debug and monitoring
-    path('__debug__/', include(debug_toolbar.urls)),
-    path('', include('django_prometheus.urls')),
+    # ---------- DEBUG ----------
+    path("__debug__/", include(debug_toolbar.urls)),
+    path("", include("django_prometheus.urls")),
 ]
-
