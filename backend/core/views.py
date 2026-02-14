@@ -7,15 +7,15 @@ from django.db.models import Avg
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
 
-from rest_framework import viewsets, permissions
+from rest_framework import viewsets, permissions, generics
 from rest_framework.decorators import action, api_view
 from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.parsers import MultiPartParser
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.viewsets import ModelViewSet
 
-# =======================
-# LOCAL
-# =======================
+
 from .models import (
     User,
     KnowledgeBase,
@@ -29,6 +29,9 @@ from .models import (
     Workflow,
     YouthProfile,
     DocumentUpload,
+    Application,
+    ProgramApplication,
+    YouthHubCategory,
 )
 
 from .serializers import (
@@ -43,17 +46,16 @@ from .serializers import (
     WorkflowSerializer,
     YouthProfileSerializer,
     DocumentUploadSerializer,
+    ApplicationSerializer,
+    ProgramApplicationSerializer,
+    YouthHubCategorySerializer,
 )
 
-# =======================
-# BASIC VIEW
-# =======================
+
 def home(request):
     return JsonResponse({"message": "Welcome to Benue Youth HelpDesk"})
 
-# =======================
-# VIEWSETS
-# =======================
+
 class UserViewSet(viewsets.ModelViewSet):
     serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -69,6 +71,26 @@ class KnowledgeBaseViewSet(viewsets.ModelViewSet):
     @method_decorator(cache_page(60 * 5))
     def list(self, request, *args, **kwargs):
         return super().list(request, *args, **kwargs)
+
+class YouthHubListView(generics.ListAPIView):
+    queryset = YouthHubCategory.objects.filter(is_active=True)
+    serializer_class = YouthHubCategorySerializer
+    
+
+class ApplicationViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    queryset = Application.objects.all()
+    serializer_class = ApplicationSerializer
+
+    @action(detail=True, methods=["get"], permission_classes=[permissions.IsAdminUser])
+    def download_cv(self, request, pk=None):
+        application = self.get_object()
+        if not application.cv:
+            return Response({"error": "No CV uploaded"}, status=404)
+
+        return Response({"cv_url": application.cv.url})
+
+
 
 class FeedbackViewSet(viewsets.ModelViewSet):
     queryset = Feedback.objects.all()
@@ -121,11 +143,7 @@ class YouthProfileViewSet(viewsets.ModelViewSet):
     def me(self, request):
         profile, created = YouthProfile.objects.get_or_create(
             user=request.user,
-            defaults={
-                "full_name": request.user.get_full_name() or request.user.username,
-                "email": request.user.email,
-                "phone": request.user.phone if hasattr(request.user, "phone") else "",
-            },
+           
         )
 
         if request.method == "GET":
@@ -138,6 +156,90 @@ class YouthProfileViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
+
+
+class ProgramApplicationViewSet(viewsets.ModelViewSet):
+    serializer_class = ProgramApplicationSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+
+        if user.role in ["officer", "admin", "superadmin"]:
+            return ProgramApplication.objects.all()
+
+        return ProgramApplication.objects.filter(user=user)
+
+    def create(self, request, *args, **kwargs):
+        user = request.user
+
+        
+        if not hasattr(user, "youth_profile"):
+            return Response(
+                {"detail": "Complete your profile before applying."},
+                status=400,
+            )
+
+        profile = user.youth_profile
+
+        
+        if not profile.is_age_eligible():
+            return Response(
+                {"detail": "Only youths between 15 and 40 years can apply."},
+                status=403,
+            )
+
+        program_id = request.data.get("program_id")
+
+        if not program_id:
+            return Response(
+                {"detail": "Program ID is required."},
+                status=400,
+            )
+
+        application, created = ProgramApplication.objects.get_or_create(
+            user=user,
+            program_id=program_id,
+        )
+
+        if not created:
+            return Response(
+                {"detail": "You have already applied for this program."},
+                status=400,
+            )
+
+        return Response(
+            {"detail": "Application submitted successfully."},
+            status=201,
+        )
+
+    def get_permissions(self):
+        if self.action in ["update", "partial_update"]:
+            return [IsOfficer()]
+        return [IsAuthenticated()]
+
+
+    @action(detail=True, methods=["post"])
+    def approve(self, request, pk=None):
+        if request.user.role not in ["officer", "admin", "superadmin"]:
+            return Response({"detail": "Forbidden"}, status=403)
+
+        application = self.get_object()
+        application.status = "approved"
+        application.save()
+
+        return Response({"status": "approved"})
+
+    @action(detail=True, methods=["post"])
+    def reject(self, request, pk=None):
+        if request.user.role not in ["officer", "admin", "superadmin"]:
+            return Response({"detail": "Forbidden"}, status=403)
+
+        application = self.get_object()
+        application.status = "rejected"
+        application.save()
+
+        return Response({"status": "rejected"})
 
 
 class DocumentUploadViewSet(viewsets.ModelViewSet):

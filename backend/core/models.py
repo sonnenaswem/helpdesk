@@ -2,7 +2,7 @@ from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
-from datetime import timedelta
+from datetime import timedelta, date
 from django.contrib.auth import get_user_model
 
 User = settings.AUTH_USER_MODEL
@@ -92,13 +92,25 @@ class User(AbstractUser):
     surname = models.CharField(max_length=100, blank=True, null=True)
     role = models.CharField(max_length=30, choices=ROLE_CHOICES, default='youth')
     phone = models.CharField(max_length=50, blank=True, null=True)
+    date_of_birth = models.DateField(blank=True, null=True)
     nin = models.CharField(max_length=50, blank=True, null=True)
     lga = models.CharField(max_length=80, blank=True, null=True)
     is_verified = models.BooleanField(default=False)
+    profile_complete = models.BooleanField(default=False)
+
+    verification_code = models.CharField(max_length=6, blank=True, null=True)
 
     def __str__(self):
         return f"{self.username} ({self.role})"
 
+class YouthHubCategory(models.Model):
+    title = models.CharField(max_length=200)
+    description = models.TextField()
+    details = models.TextField()
+    is_active =models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.title
 
     
 class KnowledgeBase(models.Model):
@@ -282,28 +294,84 @@ class PollOption(models.Model):
 
 User = get_user_model()
 
+from datetime import date
+
 class YouthProfile(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="youth_profile"
+    )
 
-    first_name = models.CharField(max_length=100)
-    middle_name = models.CharField(max_length=100, blank=True)
-    surname = models.CharField(max_length=100)
+    # Identity
+    date_of_birth = models.DateField(null=True, blank=True)
+    nin_verified = models.BooleanField(default=False)
 
-    age = models.PositiveIntegerField()
-    lga = models.CharField(max_length=100)
-    address = models.TextField()
-    email = models.EmailField(blank=True, null=True)
-    phone_number = models.CharField(max_length=50)
+    # Location
+    state = models.CharField(max_length=100, blank=True, null=True)
+    lga = models.CharField(max_length=100, blank=True, null=True)
 
-    nin = models.CharField(max_length=50, blank=True)  # for verification
+    # Background
     academic_qualifications = models.TextField(blank=True)
     area_of_interest = models.CharField(max_length=255, blank=True)
 
-    verified_nin = models.BooleanField(default=False)
-    verified_voter_id = models.BooleanField(default=False)
+    # Other verifications
+    voter_id_verified = models.BooleanField(default=False)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def age(self):
+        """Calculate age from date_of_birth."""
+        if not self.date_of_birth:
+            return None
+
+        today = date.today()
+        return (
+            today.year
+            - self.date_of_birth.year
+            - ((today.month, today.day) < (self.date_of_birth.month, self.date_of_birth.day))
+        )
+
+    def is_age_eligible(self):
+        """Check if user falls within youth age range."""
+        age = self.age()
+        if age is None:
+            return False
+        return 15 <= age <= 40
+
+    def __str__(self):
+        return f"YouthProfile for {self.user.username}"
+
+
+class Application(models.Model):
+    program_id = models.CharField(max_length=100)
+    name = models.CharField(max_length=255)
+    email = models.EmailField()
+    cv = models.FileField(upload_to='applications/cvs/', blank=True, null=True)  # store filename or URL
+    submitted_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.name} - {self.program_id}"
+
+class ProgramApplication(models.Model):
+    STATUS_CHOICES = (
+        ("pending", "Pending"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+    )
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    program_id = models.CharField(max_length=100)
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default="pending"
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("user", "program_id")
+
 
 class DocumentUpload(models.Model):
     profile = models.ForeignKey(YouthProfile, on_delete=models.CASCADE, related_name='documents')

@@ -1,6 +1,7 @@
 from rest_framework import serializers
-from .models import User, Ticket, KnowledgeBase, Feedback, Notification, TicketNote, Poll, PollOption, MinistryInfo, OfficerRole, Program, Workflow, EscalationMatrix, YouthProfile, DocumentUpload, TicketMessage
+from .models import User, Ticket, KnowledgeBase, Feedback, Notification, TicketNote, Poll, PollOption, MinistryInfo, OfficerRole, Program, Workflow, EscalationMatrix, YouthProfile, DocumentUpload, TicketMessage, Application, ProgramApplication, YouthHubCategory
 from django.contrib.auth import get_user_model
+
 
 User = get_user_model()
 
@@ -58,6 +59,11 @@ class FeedbackSerializer(serializers.ModelSerializer):
         model = Feedback
         fields = ['id', 'youth', 'ticket', 'rating', 'comment', 'created_at']
         read_only_fields = ['youth', 'created_at']
+
+class YouthHubCategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = YouthHubCategory
+        fields = "__all__"
 
 
 
@@ -158,26 +164,71 @@ class DocumentUploadSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Invalid document kind.")
         return value
 
+class ApplicationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Application
+        fields = "__all__"
+
+
+
+
+
+class ProgramApplicationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProgramApplication
+        fields = [
+            "id",
+            "program_id",
+            "user",
+            "status",
+            "created_at",
+        ]
+        read_only_fields = ["id", "user", "status", "created_at"]
+
 
 class YouthProfileSerializer(serializers.ModelSerializer):
+    # Pull fields from related User model
+    first_name = serializers.CharField(source="user.first_name", read_only=True)
+    middle_name = serializers.CharField(source="user.middle_name", read_only=True)
+    surname = serializers.CharField(source="user.surname", read_only=True)
+    email = serializers.EmailField(source="user.email", read_only=True)
+    phone = serializers.CharField(source="user.phone", read_only=True)
+    nin = serializers.CharField(source="user.nin", read_only=True)
+    lga = serializers.CharField(source="user.lga", read_only=True)
+
     documents = DocumentUploadSerializer(many=True, read_only=True)
 
+    
     class Meta:
         model = YouthProfile
         fields = [
-            'id', 'first_name', 'middle_name', 'surname', 'age', 'lga',
-            'address', 'email', 'phone_number', 'nin',
-            'academic_qualifications', 'area_of_interest',
-            'verified_nin', 'verified_voter_id', 'documents',
-            'created_at', 'updated_at'
+            'id',
+
+            # user-derived fields
+            'first_name',
+            'middle_name',
+            'surname',
+            'email',
+            'phone',
+            'nin',
+            'lga',
+
+            # profile fields
+            'age',
+            'address',
+            'academic_qualifications',
+            'area_of_interest',
+
+            'verified_nin',
+            'verified_voter_id',
+
+            'documents',
+            'created_at',
+            'updated_at',
         ]
 
+    def validate_age(self, value):
+        validate_age(value)
+        return value
 
-# class MessageSerializer(serializers.ModelSerializer):
-#    sender = serializers.StringRelatedField(read_only=True)
-#    receiver = serializers.StringRelatedField(read_only=True)
 
-#    class Meta:
-    #    model = Message
-    #    fields = "__all__"
-    #    read_only_fields = ["sender", "created_at"]

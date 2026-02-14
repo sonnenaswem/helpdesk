@@ -3,7 +3,7 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.permissions import IsAuthenticated
-
+from django.db.models import Count, Q
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 
@@ -12,15 +12,40 @@ from backend.core.models import (
     TicketMessage,
     Notification,
     User,
+
 )
+
 from backend.core.serializers import (
     TicketSerializer,
     TicketMessageSerializer,
     TicketNoteSerializer,
 )
-from backend.core.permissions import IsAdmin, IsOfficer, IsYouth
+from backend.core.permissions import IsAdmin, IsOfficer 
 from backend.core.notifications.utils import send_whatsapp_doubletick
 from backend.core.permissions import IsYouth
+
+def auto_assign_officer():
+        """
+        Assign officer with the least active workload.
+        Active = open or in_progress tickets.
+        """
+
+        officers = (
+            User.objects
+            .filter(role="officer", is_active=True)
+            .annotate(
+                active_tickets=Count(
+                    "assigned_tickets",
+                    filter=Q(
+                        assigned_tickets__status__in=["open", "in_progress"]
+                    )
+                )
+            )
+            .order_by("active_tickets", "date_joined")
+        )
+
+        return officers.first()  
+
 
 class TicketViewSet(viewsets.ModelViewSet):
     serializer_class = TicketSerializer
@@ -57,7 +82,7 @@ class TicketViewSet(viewsets.ModelViewSet):
             youth=self.request.user,
             status="open",
             escalation_level=1,
-            officer=officer,
+            officer=officer,  
         )
 
         if officer:
@@ -65,7 +90,10 @@ class TicketViewSet(viewsets.ModelViewSet):
                 user=officer,
                 message=f"New ticket assigned: {ticket.title}"
             )
+
     
+
+
     # =========================
     # ADMIN: VIEW UNASSIGNED
     # =========================
